@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +18,8 @@ func getTagHandler(tag string) tagHandler {
 		return importTagHandler
 	case "!ref":
 		return refHandler
+	case "!file":
+		return fileHandler
 	default:
 		return nil
 	}
@@ -60,6 +63,32 @@ func refHandler(tag string, value string) *yamlast.Node {
 		&yamlast.Node{Kind: yamlast.ScalarNode, Value: value})
 
 	return &refNode
+}
+
+func fileHandler(tag string, value string) *yamlast.Node {
+	path := fmt.Sprintf("./files/%s", value)
+	file, err := os.Open(path)
+	if err != nil {
+		panic(fmt.Sprintf("Error loading file: %s", path))
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if scanner.Err() != nil {
+		panic(fmt.Sprintf("Error loading file %s", path))
+	}
+
+	fileNode := yamlast.Node{Kind: yamlast.SequenceNode}
+	for _, line := range lines {
+		fileNode.Children = append(fileNode.Children,
+			&yamlast.Node{Kind: yamlast.ScalarNode, Value: line})
+	}
+
+	return &fileNode
 }
 
 // Converts a template to a json string.
