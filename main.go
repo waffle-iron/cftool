@@ -1,14 +1,10 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
-
-	"golang.org/x/crypto/nacl/secretbox"
 )
 
 type commandHandler func()
@@ -59,80 +55,63 @@ func vaultCmd() {
 }
 
 func vaultKeygenCommand() {
-	b := make([]byte, 32)
-	_, err := rand.Read(b)
+	key, err := GenerateKey()
+
 	if err != nil {
-		fmt.Println("Error generating random number for key.")
-		fmt.Printf("\tmessage: %s", err.Error())
+		fmt.Println("Error generating key:", err.Error())
 		os.Exit(-1)
 	}
 
-	encoded := base64.StdEncoding.EncodeToString(b)
-	fmt.Println(encoded)
-}
-
-func loadVaultKey() [32]byte {
-	keyBase64, err := ioutil.ReadFile(".vaultkey")
-	if err != nil {
-		panic(err.Error())
-	}
-
-	key := make([]byte, base64.StdEncoding.DecodedLen(len(keyBase64)))
-	l, err := base64.StdEncoding.Decode(key, keyBase64)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	var byteKey [32]byte
-	copy(byteKey[:], key[:l])
-	return byteKey
+	fmt.Println(EncodeVaultKey(key))
 }
 
 func vaultEncryptCmd() {
-	key := loadVaultKey()
-
-	// source := flag.Arg(2)
-	// if path == "" {
-	// 	fmt.Println("Usage: cftool vault encrypt [encryptionSource]")
-	// 	fmt.Println()
-	// 	os.Exit(-1)
-	// }
-
-	source := []byte("THIS IS A TEST")
-
-	var nonce [24]byte
-	_, err := rand.Read(nonce[:])
+	key, err := LoadVaultKey()
 	if err != nil {
-		panic(err)
+		fmt.Println("Error loading vault key:", err.Error())
+		os.Exit(-1)
 	}
 
-	encrypted := nonce[:]
-	result := secretbox.Seal(encrypted, source, &nonce, &key)
+	source := flag.Arg(2)
+	if source == "" {
+		fmt.Println("Usage: cftool vault encrypt [encryptionSource]")
+		fmt.Println()
+		os.Exit(-1)
+	}
 
-	fmt.Println(base64.StdEncoding.EncodeToString(result))
+	message, err := ioutil.ReadFile(source)
+	if err != nil {
+		fmt.Println("Error reading encryption source", source, ":", err.Error())
+		fmt.Println()
+		os.Exit(-1)
+	}
+
+	fmt.Println(Encrypt(string(message), key))
 }
 
 func vaultDecryptCmd() {
-	key := loadVaultKey()
-
-	encryptedBase64 := []byte("i+Yy9WqzO/YB8GvqmxAH4I7stFiL/HLqEIMVkhnN2dPVn0HZRZRcx6tku3XTArbZfep1clyQ")
-
-	encrypted := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBase64)))
-	_, err := base64.StdEncoding.Decode(encrypted, encryptedBase64)
+	key, err := LoadVaultKey()
 	if err != nil {
-		panic(err)
+		fmt.Println("Error opening .vaultkey: ", err.Error())
+		fmt.Println()
+		os.Exit(-1)
 	}
 
-	var nonce [24]byte
-	copy(nonce[:], encrypted[:24])
-
-	decrypted, ok := secretbox.Open(nil, encrypted[24:], &nonce, &key)
-
-	if ok {
-		fmt.Println(string(decrypted))
-	} else {
-		panic("decrypt failed")
+	source := flag.Arg(2)
+	if source == "" {
+		fmt.Println("Usage: cftool vault decrypt [encryptedFile]")
+		fmt.Println()
+		os.Exit(-1)
 	}
+
+	message, err := ioutil.ReadFile(source)
+	if err != nil {
+		fmt.Println("Error reading encrypted file", source, ":", err.Error())
+		fmt.Println()
+		os.Exit(-1)
+	}
+
+	fmt.Println(Decrypt(string(message), key))
 }
 
 // Prints generic usage for the entire app

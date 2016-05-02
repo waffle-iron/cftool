@@ -20,6 +20,8 @@ func getTagHandler(tag string) tagHandler {
 		return refHandler
 	case "!file":
 		return fileHandler
+	case "!vault":
+		return vaultHandler
 	default:
 		return nil
 	}
@@ -89,6 +91,10 @@ func fileHandler(tag string, value string) *yamlast.Node {
 	}
 
 	return &fileNode
+}
+
+func vaultHandler(tag string, value string) *yamlast.Node {
+	return nil
 }
 
 // Converts a template to a json string.
