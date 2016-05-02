@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-type commandHandler func()
+type commandHandler func(*Config)
 
 func main() {
 	commands := map[string]commandHandler{
@@ -17,29 +17,31 @@ func main() {
 
 	flag.Parse()
 
+	config := LoadConfig()
+
 	command := flag.Arg(0)
 	handler, ok := commands[command]
 	if ok {
-		handler()
+		handler(config)
 	} else {
 		usage(commands)
 	}
 }
 
-func processCmd() {
+func processCmd(config *Config) {
 	template := flag.Arg(1)
 	doc := loadTemplate(template)
 	fmt.Println(templateToJSON(doc))
 }
 
-func vaultCmd() {
+func vaultCmd(config *Config) {
 	command := flag.Arg(1)
 	if command == "keygen" {
-		vaultKeygenCommand()
+		vaultKeygenCommand(config)
 	} else if command == "encrypt" {
-		vaultEncryptCmd()
+		vaultEncryptCmd(config)
 	} else if command == "decrypt" {
-		vaultDecryptCmd()
+		vaultDecryptCmd(config)
 	} else {
 		fmt.Println("Vault Usage:")
 		fmt.Println()
@@ -54,7 +56,7 @@ func vaultCmd() {
 	}
 }
 
-func vaultKeygenCommand() {
+func vaultKeygenCommand(config *Config) {
 	key, err := GenerateKey()
 
 	if err != nil {
@@ -65,10 +67,9 @@ func vaultKeygenCommand() {
 	fmt.Println(EncodeVaultKey(key))
 }
 
-func vaultEncryptCmd() {
-	key, err := LoadVaultKey()
-	if err != nil {
-		fmt.Println("Error loading vault key:", err.Error())
+func vaultEncryptCmd(config *Config) {
+	if config.VaultKey == nil {
+		fmt.Println("Error loading vault key")
 		os.Exit(-1)
 	}
 
@@ -86,13 +87,13 @@ func vaultEncryptCmd() {
 		os.Exit(-1)
 	}
 
-	fmt.Println(Encrypt(string(message), key))
+	fmt.Println(Encrypt(string(message), config.VaultKey))
 }
 
-func vaultDecryptCmd() {
-	key, err := LoadVaultKey()
-	if err != nil {
-		fmt.Println("Error opening .vaultkey: ", err.Error())
+func vaultDecryptCmd(config *Config) {
+
+	if config.VaultKey == nil {
+		fmt.Println("Error opening .vaultkey: ")
 		fmt.Println()
 		os.Exit(-1)
 	}
@@ -111,7 +112,7 @@ func vaultDecryptCmd() {
 		os.Exit(-1)
 	}
 
-	fmt.Println(Decrypt(string(message), key))
+	fmt.Println(Decrypt(string(message), config.VaultKey))
 }
 
 // Prints generic usage for the entire app
