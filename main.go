@@ -30,7 +30,7 @@ func main() {
 
 func processCmd(config *Config) {
 	template := flag.Arg(1)
-	doc := loadTemplate(template)
+	doc := loadTemplate(template, config)
 	fmt.Println(templateToJSON(doc))
 }
 

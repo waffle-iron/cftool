@@ -23,7 +23,7 @@ func LoadConfig() *Config {
 
 	if config.VaultKey != nil {
 		encryptedVaultData, vaultFileErr := ioutil.ReadFile("vault")
-		if vaultFileErr == nil {
+		if vaultFileErr == nil && len(encryptedVaultData) > 0 {
 			decryptedVault := Decrypt(string(encryptedVaultData), config.VaultKey)
 			config.VaultAST = yamlast.Parse([]byte(decryptedVault))
 		}
