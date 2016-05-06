@@ -1,0 +1,25 @@
+{
+	"ImportPath": "github.com/ElasticProjects/cftool",
+	"GoVersion": "go1.6",
+	"GodepVersion": "v58",
+	"Deps": [
+		{
+			"ImportPath": "github.com/commondream/yaml-ast",
+			"Rev": "ce82a8aa71a95eb5077071ebf11395858f9ceabe"
+		},
+		{
+			"ImportPath": "github.com/kr/pretty",
+			"Comment": "go.weekly.2011-12-22-27-ge6ac2fc",
+			"Rev": "e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb"
+		},
+		{
+			"ImportPath": "github.com/kr/text",
+			"Rev": "bb797dc4fb8320488f47bf11de07a733d7233e1f"
+		},
+		{
+			"ImportPath": "github.com/stvp/assert",
+			"Comment": "release.r60-19-g488e5f8",
+			"Rev": "488e5f84a1e0e947e909f1f4f1e851502f61972d"
+		}
+	]
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"github.com/commondream/yaml-ast"
 )
 
-type tagHandler func(*Config, string, string) *yamlast.Node
+type tagHandler func(*Config, string, string) (*yamlast.Node, error)
 
 func getTagHandler(tag string) tagHandler {
 	switch tag {
@@ -27,61 +28,76 @@ func getTagHandler(tag string) tagHandler {
 	}
 }
 
-func loadTemplate(path string, config *Config) *yamlast.Node {
+func loadTemplate(path string, config *Config) (*yamlast.Node, error) {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		fmt.Printf("Error reading file %s.\n", path)
-		os.Exit(1)
+		return nil, errors.New(fmt.Sprintf("Error reading file %s: $s", path, err))
 	}
 
-	doc := yamlast.Parse(b)
+	doc, err := yamlast.Parse(b)
+	if err != nil {
+		return nil, err
+	}
 	processTags(doc, config)
-	return doc
+	return doc, nil
 }
 
-func processTags(node *yamlast.Node, config *Config) {
+func processTags(node *yamlast.Node, config *Config) error {
 	for index, child := range node.Children {
 		if child.Tag != "" {
 			handler := getTagHandler(child.Tag)
 			if handler != nil {
-				node.Children[index] = handler(config, child.Tag, child.Value)
+				var err error
+				node.Children[index], err = handler(config, child.Tag, child.Value)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
-		processTags(child, config)
+		err := processTags(child, config)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func importTagHandler(config *Config, tag string, value string) *yamlast.Node {
-	subDoc := loadTemplate(fmt.Sprintf("./imports/%s.yml", value), config)
-	return subDoc.Children[0]
+func importTagHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+	subDoc, err := loadTemplate(fmt.Sprintf("./imports/%s.yml", value), config)
+	if err != nil {
+		return nil, err
+	}
+
+	return subDoc.Children[0], nil
 }
 
-func refHandler(config *Config, tag string, value string) *yamlast.Node {
+func refHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
 	refNode := yamlast.Node{Kind: yamlast.MappingNode}
 	refNode.Children = append(refNode.Children,
 		&yamlast.Node{Kind: yamlast.ScalarNode, Value: "Ref"})
 	refNode.Children = append(refNode.Children,
 		&yamlast.Node{Kind: yamlast.ScalarNode, Value: value})
 
-	return &refNode
+	return &refNode, nil
 }
 
-func fileHandler(config *Config, tag string, value string) *yamlast.Node {
+func fileHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
 	path := fmt.Sprintf("./files/%s", value)
 	file, err := os.Open(path)
 	if err != nil {
-		panic(fmt.Sprintf("Error loading file: %s", path))
+		return nil, errors.New(fmt.Sprintf("Error loading file %s: %s", path, err.Error()))
 	}
 	defer file.Close()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		lines = append(lines, scanner.Text()+"\n")
 	}
 	if scanner.Err() != nil {
-		panic(fmt.Sprintf("Error loading file %s", path))
+		return nil, errors.New(fmt.Sprintf("Error reading file %s: %s", path, scanner.Err().Error()))
 	}
 
 	fileNode := yamlast.Node{Kind: yamlast.SequenceNode}
@@ -90,13 +106,23 @@ func fileHandler(config *Config, tag string, value string) *yamlast.Node {
 			&yamlast.Node{Kind: yamlast.ScalarNode, Value: line})
 	}
 
-	return &fileNode
+	joinArgs := yamlast.Node{Kind: yamlast.SequenceNode}
+	joinArgs.Children = append(joinArgs.Children,
+		&yamlast.Node{Kind: yamlast.ScalarNode, Value: ""},
+		&fileNode)
+
+	join := yamlast.Node{Kind: yamlast.MappingNode}
+	join.Children = append(join.Children,
+		&yamlast.Node{Kind: yamlast.ScalarNode, Value: "Fn::Join"},
+		&joinArgs)
+
+	return &join, nil
 }
 
-func vaultHandler(config *Config, tag string, value string) *yamlast.Node {
+func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
 
 	if config.VaultAST == nil {
-		return &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}
+		return &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}, nil
 	}
 
 	node := yamlast.SelectNode(config.VaultAST, value)
@@ -104,7 +130,7 @@ func vaultHandler(config *Config, tag string, value string) *yamlast.Node {
 	if node == nil {
 		node = &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}
 	}
-	return node
+	return node, nil
 }
 
 // Converts a template to a json string.

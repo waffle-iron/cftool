@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
+	"os"
 
 	"github.com/commondream/yaml-ast"
 )
@@ -22,10 +24,21 @@ func LoadConfig() *Config {
 	}
 
 	if config.VaultKey != nil {
-		encryptedVaultData, vaultFileErr := ioutil.ReadFile("vault")
+		path := "vault"
+		encryptedVaultData, vaultFileErr := ioutil.ReadFile(path)
+
+		if vaultFileErr != nil {
+			fmt.Fprintf(os.Stderr, "Error opening vault file %s: %s\n", path, vaultFileErr.Error())
+		}
+
 		if vaultFileErr == nil && len(encryptedVaultData) > 0 {
 			decryptedVault := Decrypt(string(encryptedVaultData), config.VaultKey)
-			config.VaultAST = yamlast.Parse([]byte(decryptedVault))
+
+			var err error
+			config.VaultAST, err = yamlast.Parse([]byte(decryptedVault))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error parsing vault yaml: %s\n", err.Error())
+			}
 		}
 	}
 
