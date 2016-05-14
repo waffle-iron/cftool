@@ -27,10 +27,6 @@ func LoadConfig() *Config {
 		path := "vault"
 		encryptedVaultData, vaultFileErr := ioutil.ReadFile(path)
 
-		if vaultFileErr != nil {
-			fmt.Fprintf(os.Stderr, "Error opening vault file %s: %s\n", path, vaultFileErr.Error())
-		}
-
 		if vaultFileErr == nil && len(encryptedVaultData) > 0 {
 			decryptedVault := Decrypt(string(encryptedVaultData), config.VaultKey)
 
