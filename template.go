@@ -38,11 +38,11 @@ func loadTemplate(path string, config *Config) (*yamlast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	processTags(doc, config)
+	processTree(doc, config)
 	return doc, nil
 }
 
-func processTags(node *yamlast.Node, config *Config) error {
+func processTree(node *yamlast.Node, config *Config) error {
 	for index, child := range node.Children {
 		if child.Tag != "" {
 			handler := getTagHandler(child.Tag)
@@ -55,7 +55,7 @@ func processTags(node *yamlast.Node, config *Config) error {
 			}
 		}
 
-		err := processTags(child, config)
+		err := processTree(child, config)
 		if err != nil {
 			return err
 		}
@@ -135,7 +135,7 @@ func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, erro
 
 // Converts a template to a json string.
 func templateToJSON(node *yamlast.Node) string {
-	jsonData, err := json.MarshalIndent(nodeToInterface(node), "", "  ")
+	jsonData, err := json.MarshalIndent(nodeToInterface(node, nil), "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -144,11 +144,11 @@ func templateToJSON(node *yamlast.Node) string {
 }
 
 // Converts a node to an object
-func nodeToInterface(node *yamlast.Node) interface{} {
+func nodeToInterface(node *yamlast.Node, parent *yamlast.Node) interface{} {
 	switch node.Kind {
 	case yamlast.DocumentNode:
 		if len(node.Children) > 0 {
-			return nodeToInterface(node.Children[0])
+			return nodeToInterface(node.Children[0], node)
 		}
 		return nil
 
@@ -159,7 +159,10 @@ func nodeToInterface(node *yamlast.Node) interface{} {
 			key := node.Children[i*2]
 			value := node.Children[i*2+1]
 
-			mapping[key.Value] = nodeToInterface(value)
+			// Filter out metadata nodes
+			if parent.Kind != yamlast.DocumentNode || key.Value != "CFToolMetadata" {
+				mapping[key.Value] = nodeToInterface(value, node)
+			}
 		}
 		return mapping
 
@@ -167,7 +170,7 @@ func nodeToInterface(node *yamlast.Node) interface{} {
 		sequence := []interface{}{}
 
 		for _, child := range node.Children {
-			sequence = append(sequence, nodeToInterface(child))
+			sequence = append(sequence, nodeToInterface(child, node))
 		}
 
 		return sequence
