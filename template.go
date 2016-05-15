@@ -11,6 +11,10 @@ import (
 	"github.com/commondream/yaml-ast"
 )
 
+const (
+	MetadataKey = "CFToolMetadata"
+)
+
 type tagHandler func(string, string) (*yamlast.Node, error)
 
 func (template *Template) getTagHandler(tag string) tagHandler {
@@ -23,6 +27,8 @@ func (template *Template) getTagHandler(tag string) tagHandler {
 		return template.fileHandler
 	case "!vault":
 		return template.vaultHandler
+	case "!meta":
+		return template.metadataHandler
 	default:
 		return nil
 	}
@@ -61,7 +67,11 @@ func (template *Template) loadTemplate(path string) (*yamlast.Node, error) {
 		template.DocumentNode = doc
 	}
 
-	template.processTree(doc)
+	err = template.processTree(doc)
+	if err != nil {
+		return nil, err
+	}
+
 	return doc, nil
 }
 
@@ -75,6 +85,8 @@ func (template *Template) processTree(node *yamlast.Node) error {
 				if err != nil {
 					return err
 				}
+			} else {
+				return fmt.Errorf("Unknown tag: %s", child.Tag)
 			}
 		}
 
@@ -143,7 +155,6 @@ func (template *Template) fileHandler(tag string, value string) (*yamlast.Node, 
 }
 
 func (template *Template) vaultHandler(tag string, value string) (*yamlast.Node, error) {
-
 	if template.Config.VaultAST == nil {
 		return &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}, nil
 	}
@@ -154,6 +165,34 @@ func (template *Template) vaultHandler(tag string, value string) (*yamlast.Node,
 		node = &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}
 	}
 	return node, nil
+}
+
+func (template *Template) metadataNode() *yamlast.Node {
+	topMap := template.DocumentNode.Children[0]
+
+	if topMap.Kind != yamlast.MappingNode {
+		return nil
+	}
+
+	for i := 0; i < len(topMap.Children)/2; i++ {
+		if topMap.Children[i].Value == MetadataKey {
+			return topMap.Children[i+1]
+		}
+	}
+
+	return nil
+}
+
+func (template *Template) metadataHandler(tag string, value string) (*yamlast.Node, error) {
+	metadataNode := template.metadataNode()
+	if metadataNode != nil {
+		node := yamlast.SelectNode(metadataNode, value)
+		if node != nil {
+			return node, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Unknown metadata value: %s", value)
 }
 
 // Converts a template to a json string.
@@ -183,7 +222,7 @@ func nodeToInterface(node *yamlast.Node, parent *yamlast.Node) interface{} {
 			value := node.Children[i*2+1]
 
 			// Filter out metadata nodes
-			if parent.Kind != yamlast.DocumentNode || key.Value != "CFToolMetadata" {
+			if parent.Kind != yamlast.DocumentNode || key.Value != MetadataKey {
 				mapping[key.Value] = nodeToInterface(value, node)
 			}
 		}
