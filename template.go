@@ -11,24 +11,42 @@ import (
 	"github.com/commondream/yaml-ast"
 )
 
-type tagHandler func(*Config, string, string) (*yamlast.Node, error)
+type tagHandler func(string, string) (*yamlast.Node, error)
 
-func getTagHandler(tag string) tagHandler {
+func (template *Template) getTagHandler(tag string) tagHandler {
 	switch tag {
 	case "!import":
-		return importTagHandler
+		return template.importTagHandler
 	case "!ref":
-		return refHandler
+		return template.refHandler
 	case "!file":
-		return fileHandler
+		return template.fileHandler
 	case "!vault":
-		return vaultHandler
+		return template.vaultHandler
 	default:
 		return nil
 	}
 }
 
-func loadTemplate(path string, config *Config) (*yamlast.Node, error) {
+// Template represents a template that we're proceesing.
+type Template struct {
+	Config       *Config
+	DocumentNode *yamlast.Node
+}
+
+// NewTemplate initializes and returns a new template.
+func NewTemplate(path string, config *Config) (*Template, error) {
+	template := &Template{Config: config}
+
+	_, err := template.loadTemplate(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return template, nil
+}
+
+func (template *Template) loadTemplate(path string) (*yamlast.Node, error) {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Error reading file %s: $s", path, err))
@@ -38,24 +56,29 @@ func loadTemplate(path string, config *Config) (*yamlast.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	processTree(doc, config)
+
+	if template.DocumentNode == nil {
+		template.DocumentNode = doc
+	}
+
+	template.processTree(doc)
 	return doc, nil
 }
 
-func processTree(node *yamlast.Node, config *Config) error {
+func (template *Template) processTree(node *yamlast.Node) error {
 	for index, child := range node.Children {
 		if child.Tag != "" {
-			handler := getTagHandler(child.Tag)
+			handler := template.getTagHandler(child.Tag)
 			if handler != nil {
 				var err error
-				node.Children[index], err = handler(config, child.Tag, child.Value)
+				node.Children[index], err = handler(child.Tag, child.Value)
 				if err != nil {
 					return err
 				}
 			}
 		}
 
-		err := processTree(child, config)
+		err := template.processTree(child)
 		if err != nil {
 			return err
 		}
@@ -64,8 +87,8 @@ func processTree(node *yamlast.Node, config *Config) error {
 	return nil
 }
 
-func importTagHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
-	subDoc, err := loadTemplate(fmt.Sprintf("./imports/%s.yml", value), config)
+func (template *Template) importTagHandler(tag string, value string) (*yamlast.Node, error) {
+	subDoc, err := template.loadTemplate(fmt.Sprintf("./imports/%s.yml", value))
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +96,7 @@ func importTagHandler(config *Config, tag string, value string) (*yamlast.Node, 
 	return subDoc.Children[0], nil
 }
 
-func refHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+func (template *Template) refHandler(tag string, value string) (*yamlast.Node, error) {
 	refNode := yamlast.Node{Kind: yamlast.MappingNode}
 	refNode.Children = append(refNode.Children,
 		&yamlast.Node{Kind: yamlast.ScalarNode, Value: "Ref"})
@@ -83,7 +106,7 @@ func refHandler(config *Config, tag string, value string) (*yamlast.Node, error)
 	return &refNode, nil
 }
 
-func fileHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+func (template *Template) fileHandler(tag string, value string) (*yamlast.Node, error) {
 	path := fmt.Sprintf("./files/%s", value)
 	file, err := os.Open(path)
 	if err != nil {
@@ -119,13 +142,13 @@ func fileHandler(config *Config, tag string, value string) (*yamlast.Node, error
 	return &join, nil
 }
 
-func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+func (template *Template) vaultHandler(tag string, value string) (*yamlast.Node, error) {
 
-	if config.VaultAST == nil {
+	if template.Config.VaultAST == nil {
 		return &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}, nil
 	}
 
-	node := yamlast.SelectNode(config.VaultAST, value)
+	node := yamlast.SelectNode(template.Config.VaultAST, value)
 
 	if node == nil {
 		node = &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}
@@ -134,8 +157,8 @@ func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, erro
 }
 
 // Converts a template to a json string.
-func templateToJSON(node *yamlast.Node) string {
-	jsonData, err := json.MarshalIndent(nodeToInterface(node, nil), "", "  ")
+func (template *Template) ToJSON() string {
+	jsonData, err := json.MarshalIndent(nodeToInterface(template.DocumentNode, nil), "", "  ")
 	if err != nil {
 		panic(err)
 	}
