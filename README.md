@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/ElasticProjects/cftool.png?label=ready&title=Ready)](https://waffle.io/ElasticProjects/cftool)
 # cftool
 
 A lightweight tool that makes working with CloudFormation easier. You can learn
