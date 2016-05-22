@@ -1,5 +1,5 @@
 dependencies:
   override:
-    - cd $GOPATH/github.com/ElasticProjects/cftool
+    - cd /home/ubuntu/.go_workspace/github.com/ElasticProjects/cftool
     - go get github.com/tools/godep
     - godep restore
