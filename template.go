@@ -55,7 +55,7 @@ func (template *Template) LoadFile(path string) error {
 func (template *Template) loadFileInternal(path string, isRoot bool) (*yamlast.Node, error) {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error reading file %s: $s", path, err))
+		return nil, errors.New(fmt.Sprintf("Error reading file %s: %s", path, err))
 	}
 
 	return template.loadSourceInternal(b, isRoot)
