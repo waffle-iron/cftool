@@ -29,14 +29,15 @@ func main() {
 }
 
 func processCmd(config *Config) {
-	template := flag.Arg(1)
-	doc, err := loadTemplate(template, config)
+	templatePath := flag.Arg(1)
+	template := NewTemplate(config)
+	err := template.LoadFile(templatePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "An error occurred while processing the template: ", err.Error())
 		os.Exit(-1)
 	}
 
-	fmt.Println(templateToJSON(doc))
+	fmt.Println(template.ToJSON())
 }
 
 func vaultCmd(config *Config) {

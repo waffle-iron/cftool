@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/commondream/yaml-ast"
+	"github.com/commondream/yamlast"
 )
 
 // Config represents the configuration of cftool for an execution.

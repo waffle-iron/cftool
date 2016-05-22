@@ -8,54 +8,98 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/commondream/yaml-ast"
+	"github.com/commondream/yamlast"
 )
 
-type tagHandler func(*Config, string, string) (*yamlast.Node, error)
+const (
+	MetadataKey = "CFToolMetadata"
+)
 
-func getTagHandler(tag string) tagHandler {
+type tagHandler func(string, string) (*yamlast.Node, error)
+
+func (template *Template) getTagHandler(tag string) tagHandler {
 	switch tag {
 	case "!import":
-		return importTagHandler
+		return template.importTagHandler
 	case "!ref":
-		return refHandler
+		return template.refHandler
 	case "!file":
-		return fileHandler
+		return template.fileHandler
 	case "!vault":
-		return vaultHandler
+		return template.vaultHandler
+	case "!meta":
+		return template.metadataHandler
 	default:
 		return nil
 	}
 }
 
-func loadTemplate(path string, config *Config) (*yamlast.Node, error) {
+// Template represents a template that we're proceesing.
+type Template struct {
+	Config       *Config
+	DocumentNode *yamlast.Node
+}
+
+// NewTemplate initializes and returns a new template.
+func NewTemplate(config *Config) *Template {
+	template := &Template{Config: config}
+
+	return template
+}
+
+func (template *Template) LoadFile(path string) error {
+	_, err := template.loadFileInternal(path, true)
+	return err
+}
+
+func (template *Template) loadFileInternal(path string, isRoot bool) (*yamlast.Node, error) {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error reading file %s: $s", path, err))
+		return nil, errors.New(fmt.Sprintf("Error reading file %s: %s", path, err))
 	}
 
-	doc, err := yamlast.Parse(b)
+	return template.loadSourceInternal(b, isRoot)
+}
+
+func (template *Template) LoadSource(source []byte) error {
+	_, err := template.loadSourceInternal(source, true)
+	return err
+}
+
+func (template *Template) loadSourceInternal(source []byte, isRoot bool) (*yamlast.Node, error) {
+	doc, err := yamlast.Parse(source)
 	if err != nil {
 		return nil, err
 	}
-	processTags(doc, config)
+
+	if isRoot {
+		template.DocumentNode = doc
+	}
+
+	err = template.processTree(doc)
+	if err != nil {
+		return nil, err
+	}
+
 	return doc, nil
 }
 
-func processTags(node *yamlast.Node, config *Config) error {
+func (template *Template) processTree(node *yamlast.Node) error {
 	for index, child := range node.Children {
 		if child.Tag != "" {
-			handler := getTagHandler(child.Tag)
+			handler := template.getTagHandler(child.Tag)
 			if handler != nil {
 				var err error
-				node.Children[index], err = handler(config, child.Tag, child.Value)
+				node.Children[index], err = handler(child.Tag, child.Value)
 				if err != nil {
 					return err
 				}
+			} else {
+				return fmt.Errorf("Unknown tag: %s", child.Tag)
 			}
 		}
 
-		err := processTags(child, config)
+		err := template.processTree(child)
 		if err != nil {
 			return err
 		}
@@ -64,8 +108,8 @@ func processTags(node *yamlast.Node, config *Config) error {
 	return nil
 }
 
-func importTagHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
-	subDoc, err := loadTemplate(fmt.Sprintf("./imports/%s.yml", value), config)
+func (template *Template) importTagHandler(tag string, value string) (*yamlast.Node, error) {
+	subDoc, err := template.loadFileInternal(fmt.Sprintf("./imports/%s.yml", value), false)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +117,7 @@ func importTagHandler(config *Config, tag string, value string) (*yamlast.Node, 
 	return subDoc.Children[0], nil
 }
 
-func refHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+func (template *Template) refHandler(tag string, value string) (*yamlast.Node, error) {
 	refNode := yamlast.Node{Kind: yamlast.MappingNode}
 	refNode.Children = append(refNode.Children,
 		&yamlast.Node{Kind: yamlast.ScalarNode, Value: "Ref"})
@@ -83,7 +127,7 @@ func refHandler(config *Config, tag string, value string) (*yamlast.Node, error)
 	return &refNode, nil
 }
 
-func fileHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
+func (template *Template) fileHandler(tag string, value string) (*yamlast.Node, error) {
 	path := fmt.Sprintf("./files/%s", value)
 	file, err := os.Open(path)
 	if err != nil {
@@ -119,13 +163,12 @@ func fileHandler(config *Config, tag string, value string) (*yamlast.Node, error
 	return &join, nil
 }
 
-func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, error) {
-
-	if config.VaultAST == nil {
+func (template *Template) vaultHandler(tag string, value string) (*yamlast.Node, error) {
+	if template.Config.VaultAST == nil {
 		return &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}, nil
 	}
 
-	node := yamlast.SelectNode(config.VaultAST, value)
+	node := yamlast.SelectNode(template.Config.VaultAST, value)
 
 	if node == nil {
 		node = &yamlast.Node{Kind: yamlast.ScalarNode, Value: ""}
@@ -133,9 +176,37 @@ func vaultHandler(config *Config, tag string, value string) (*yamlast.Node, erro
 	return node, nil
 }
 
+func (template *Template) metadataNode() *yamlast.Node {
+	topMap := template.DocumentNode.Children[0]
+
+	if topMap.Kind != yamlast.MappingNode {
+		return nil
+	}
+
+	for i := 0; i < len(topMap.Children)/2; i++ {
+		if topMap.Children[i].Value == MetadataKey {
+			return topMap.Children[i+1]
+		}
+	}
+
+	return nil
+}
+
+func (template *Template) metadataHandler(tag string, value string) (*yamlast.Node, error) {
+	metadataNode := template.metadataNode()
+	if metadataNode != nil {
+		node := yamlast.SelectNode(metadataNode, value)
+		if node != nil {
+			return node, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Unknown metadata value: %s", value)
+}
+
 // Converts a template to a json string.
-func templateToJSON(node *yamlast.Node) string {
-	jsonData, err := json.MarshalIndent(nodeToInterface(node), "", "  ")
+func (template *Template) ToJSON() string {
+	jsonData, err := json.MarshalIndent(nodeToInterface(template.DocumentNode, nil), "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -144,11 +215,11 @@ func templateToJSON(node *yamlast.Node) string {
 }
 
 // Converts a node to an object
-func nodeToInterface(node *yamlast.Node) interface{} {
+func nodeToInterface(node *yamlast.Node, parent *yamlast.Node) interface{} {
 	switch node.Kind {
 	case yamlast.DocumentNode:
 		if len(node.Children) > 0 {
-			return nodeToInterface(node.Children[0])
+			return nodeToInterface(node.Children[0], node)
 		}
 		return nil
 
@@ -159,7 +230,10 @@ func nodeToInterface(node *yamlast.Node) interface{} {
 			key := node.Children[i*2]
 			value := node.Children[i*2+1]
 
-			mapping[key.Value] = nodeToInterface(value)
+			// Filter out metadata nodes
+			if parent.Kind != yamlast.DocumentNode || key.Value != MetadataKey {
+				mapping[key.Value] = nodeToInterface(value, node)
+			}
 		}
 		return mapping
 
@@ -167,7 +241,7 @@ func nodeToInterface(node *yamlast.Node) interface{} {
 		sequence := []interface{}{}
 
 		for _, child := range node.Children {
-			sequence = append(sequence, nodeToInterface(child))
+			sequence = append(sequence, nodeToInterface(child, node))
 		}
 
 		return sequence

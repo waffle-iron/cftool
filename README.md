@@ -113,3 +113,8 @@ of using them.
 
 !config
 
+### !metadata
+
+`!metadata` accesses keys in the `CFToolMetadata` section of your CloudFormation
+template. Use this for variables that you repeat frequently in your template.
+

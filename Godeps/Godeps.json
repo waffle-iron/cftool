@@ -4,7 +4,7 @@
 	"GodepVersion": "v58",
 	"Deps": [
 		{
-			"ImportPath": "github.com/commondream/yaml-ast",
+			"ImportPath": "github.com/commondream/yamlast",
 			"Rev": "ce82a8aa71a95eb5077071ebf11395858f9ceabe"
 		},
 		{
