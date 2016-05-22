@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/commondream/yaml-ast"
+	"github.com/commondream/yamlast"
 	"github.com/stvp/assert"
 )
 

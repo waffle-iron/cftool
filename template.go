@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/commondream/yaml-ast"
+	"github.com/commondream/yamlast"
 )
 
 const (
