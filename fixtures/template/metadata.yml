@@ -1,0 +1,7 @@
+---
+CFToolMetadata:
+  Key: Rad
+Resources:
+  SomeResource:
+    Type: SomeType
+    Metadata: !meta Key

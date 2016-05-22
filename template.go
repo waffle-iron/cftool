@@ -41,29 +41,38 @@ type Template struct {
 }
 
 // NewTemplate initializes and returns a new template.
-func NewTemplate(path string, config *Config) (*Template, error) {
+func NewTemplate(config *Config) *Template {
 	template := &Template{Config: config}
 
-	_, err := template.loadTemplate(path)
-	if err != nil {
-		return nil, err
-	}
-
-	return template, nil
+	return template
 }
 
-func (template *Template) loadTemplate(path string) (*yamlast.Node, error) {
+func (template *Template) LoadFile(path string) error {
+	_, err := template.loadFileInternal(path, true)
+	return err
+}
+
+func (template *Template) loadFileInternal(path string, isRoot bool) (*yamlast.Node, error) {
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("Error reading file %s: $s", path, err))
 	}
 
-	doc, err := yamlast.Parse(b)
+	return template.loadSourceInternal(b, isRoot)
+}
+
+func (template *Template) LoadSource(source []byte) error {
+	_, err := template.loadSourceInternal(source, true)
+	return err
+}
+
+func (template *Template) loadSourceInternal(source []byte, isRoot bool) (*yamlast.Node, error) {
+	doc, err := yamlast.Parse(source)
 	if err != nil {
 		return nil, err
 	}
 
-	if template.DocumentNode == nil {
+	if isRoot {
 		template.DocumentNode = doc
 	}
 
@@ -100,7 +109,7 @@ func (template *Template) processTree(node *yamlast.Node) error {
 }
 
 func (template *Template) importTagHandler(tag string, value string) (*yamlast.Node, error) {
-	subDoc, err := template.loadTemplate(fmt.Sprintf("./imports/%s.yml", value))
+	subDoc, err := template.loadFileInternal(fmt.Sprintf("./imports/%s.yml", value), false)
 	if err != nil {
 		return nil, err
 	}

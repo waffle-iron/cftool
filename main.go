@@ -30,7 +30,8 @@ func main() {
 
 func processCmd(config *Config) {
 	templatePath := flag.Arg(1)
-	template, err := NewTemplate(templatePath, config)
+	template := NewTemplate(config)
+	err := template.LoadFile(templatePath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "An error occurred while processing the template: ", err.Error())
 		os.Exit(-1)

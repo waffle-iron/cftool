@@ -1,0 +1,7 @@
+---
+CFToolMetadata:
+  Some: Value
+
+Resources:
+  Foo: !meta Some
+  Bar: False
